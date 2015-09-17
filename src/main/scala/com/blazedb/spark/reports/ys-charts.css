@@ -1,0 +1,26 @@
+.axis {
+    -fx-font-size: 0.8em;
+    -fx-tick-label-font-size: 0.5em;
+    -fx-tick-label-fill: -fx-text-background-color;
+}
+.chart-legend {
+    -fx-font-size: 0.7em;
+}
+
+.axis-tick-mark {
+    -fx-font-size: 0.6em;
+    -fx-fill: null;
+    -fx-stroke: #666666;
+}
+.axis-minor-tick-mark {
+    -fx-font-size: 0.4em;
+    -fx-fill: null;
+    -fx-stroke: #AAAAAA;
+}
+
+.chart-title {
+    -fx-font-size: 0.9em;
+    white-space: pre-line;
+
+}
+
