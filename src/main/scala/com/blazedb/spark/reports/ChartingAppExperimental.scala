@@ -76,7 +76,7 @@ object ChartingAppExperimental {
     def getData(dataPath: String): (String, MapSeriesMap) = {
       val lines = grabData(dataPath)
 
-      val (csvData, overSeriesMap) = ReportsDataPrep.formatData(lines)
+      val (csvData, overSeriesMap) = ReportsDataPrep.formatData(coreMetaInfo, lines)
       (csvData, overSeriesMap)
     }
 
