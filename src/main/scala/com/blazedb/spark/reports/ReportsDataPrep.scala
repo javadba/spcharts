@@ -22,9 +22,8 @@ import javafx.collections.FXCollections
 import javafx.scene.chart.XYChart
 import javafx.scene.chart.XYChart._
 
-import com.sun.javaws.exceptions.InvalidArgumentException
-
 import scala.collection.SortedMap
+import scala.util.matching.Regex
 
 /**
  * ReportsDataPrep
@@ -39,124 +38,131 @@ import scala.collection.SortedMap
  * charts.
  *
  * There are two significant components to this program: 
- *   Data processing via grabData and formatData
- *   Charting: via the ChartingApp JavaFx application
+ * Data processing via grabData and formatData
+ * Charting: via the ChartingApp JavaFx application
  */
 object ReportsDataPrep {
 
   import collection.mutable
 
-  case class SeriesEntry(groupName: String, inputLine: LLine, native: String, nskew: Int, action: String, nrecs: Int, duration: Int) {
-    def seriesName() = s"$nskew $action $native"
-
-    def name() = s"$groupName ${seriesName()}"
-  }
-
-  type SeriesValSeq = Seq[SeriesEntry]
-
-  type SeriesInst = mutable.HashMap[String, SeriesValSeq]
-
   type ColValT = ColVal[_]
 
   def pr(msg: String) = println(msg)
 
-//    fields: tname,tstamp,nparts,nskew,xform,action,native,nrecs,count,duration"
-//    csv.headers: TestName,Tstamp,Partitions,SkewFactor,Transform,Action,Native,InputRecords,OutputRecords,Duration
-
   case class ColInfo(name: String, csvName: String, ctype: Class[_] = classOf[String], regex: String = """[\w]+)""",
-                      xform: (String) => String = identity)
+                     xform: (String) => String = identity)
+
   import reflect.runtime.universe._
 
   sealed abstract class ColVal[T: TypeTag](val meta: ColInfo, val cval: T) {
     def dtype() = cval.getClass
+    override def toString() = { cval.toString }
   }
+
   class StrColVal(cinfo: ColInfo, cv: String) extends ColVal[String](cinfo, cv)
-  class IntColVal(cinfo: ColInfo, cv: String) extends ColVal[String](cinfo, cv)
+
+  class IntColVal(cinfo: ColInfo, cv: Int) extends ColVal[Int](cinfo, cv)
+
+  class DoubleColVal(cinfo: ColInfo, cv: Double) extends ColVal[Double](cinfo, cv)
 
   val CI = ColInfo
   val coreMetaInfo = MetaInfo(Seq(ColInfo("tstamp", "Tstamp", classOf[String], """[\d]{4}-[\d]{6})""", formatT),
-                      ColInfo("tname", "TestName"),
-                      ColInfo("inrecs", "InRecords", classOf[Int], """[\d]+)recs""",(x) => (x.toInt / 1000).toString),
-                        ColInfo("nparts", "Partitions", classOf[Int], """[\d]+)parts"""),
-                        ColInfo("nskew", "Skew",classOf[Int], """[\d]+)skew"""),
-                        ColInfo("native", "Ignite"),
-                        ColInfo("xform", "Xform"),
-                        ColInfo("action", "Action"),
-                      ColInfo("duration", "Duration", classOf[Int], """[\d]+)""", (x) => (x.toInt / 1000).toString),
-                      ColInfo("outrecs", "OutRecords", classOf[Int], """[\d]+)recs""", (x) => (x.toInt / 1000).toString)
-              ),
-      "$tname $xform on $formatT($tstamp) Partitions=$nparts Skew=$nskew",
-     "$tname $tstamp $nparts $nskew $xform $action $native"
+    ColInfo("tname", "TestName"),
+    ColInfo("inrecs", "InRecords", classOf[Int], """[\d]+)recs""", (x) => (x.toInt / 1000).toString),
+    ColInfo("nparts", "Partitions", classOf[Int], """[\d]+)parts"""),
+    ColInfo("nskew", "Skew", classOf[Int], """[\d]+)skew"""),
+    ColInfo("native", "Ignite"),
+    ColInfo("xform", "Xform"),
+    ColInfo("action", "Action"),
+    ColInfo("duration", "Duration", classOf[Int], """[\d]+)""", (x) => (x.toInt / 1000).toString),
+    ColInfo("outrecs", "OutRecords", classOf[Int], """[\d]+)recs""", (x) => (x.toInt / 1000).toString)
+  ),
+    "$tname $xform on $formatT($tstamp) Partitions=$nparts Skew=$nskew",
+    "$tname $tstamp $nparts $nskew $xform $action $native"
+  )
+
+  val eMetaInfo = MetaInfo(Seq(ColInfo("tstamp", "Tstamp", classOf[String], """[\d]{4}-[\d]{6})""", formatT),
+    ColInfo("tname", "TestName"),
+    ColInfo("loops", "Loops", classOf[Int], """[\d]+)Loops""", (x) => (x.toInt / 1000).toString),
+    ColInfo("cores", "Cores", classOf[Int], """[\d]+)cores""", (x) => (x.toInt / 1000).toString),
+    ColInfo("mem", "MB", classOf[Int], """[\d]+)mb""", (x) => (x.toInt / 1000).toString),
+    ColInfo("inrecs", "InRecords", classOf[Int], """[\d]+)recs""", (x) => (x.toInt / 1000).toString),
+    ColInfo("nparts", "Partitions", classOf[Int], """[\d]+)parts"""),
+    ColInfo("xform", "Xform"),
+    ColInfo("action", "Action"),
+    ColInfo("duration", "Duration", classOf[Double], """[\d]+\.[\d]+)""", (x) => x.toString),
+    ColInfo("outrecs", "OutRecords", classOf[Int], """[\d]+)recs""", (x) => (x.toInt / 1000).toString)
+  ),
+    "$tname $xform on $tstamp Parts=$nparts",
+    "$tname $tstamp $nparts $xform $action"
   )
 
   case class MetaInfo(allCols: Seq[ColInfo],
-                       key1Pat: String, key2Pat: String) {
-    val colsMap = Map(allCols.map( c => (c.name, c)):_*)
+                      key1Pat: String, key2Pat: String) {
+    val colsMap = Map(allCols.map(c => (c.name, c)): _*)
     val csvHeader = allCols.map(_.csvName).mkString(",")
-    val systemCols = Array("tstamp", "tname", "duration","outrecs")
+    val systemCols = Array("tstamp", "tname", "duration", "outrecs")
     val userCols = allCols.filter(c => !systemCols.contains(c.name.toLowerCase))
     val regex = {
+      val groups = allCols.map {
+        _.name
+      }
       val mmap = userCols.map { ci =>
         s"(?<${ci.name}>${ci.regex}"
       }.mkString(" ")
 
-//  .*Completed (?<tstamp>[\d]{4}-[\d]{6})/(?<tname>[\w]+) (?<inrecs>[\d]+)recs (?<nparts>[\d]+)parts (?<nskew>[\d]+)skew (?<native>[\w]+) (?<xform>[\w]+) (?<action>[\w]+) - duration=(?<duration>[\d]+) millis count=(?<outrecs>[\d]+).*
-      s""".*Completed (?<tstamp>[\\d]{4}-[\\d]{6})/(?<tname>[\\w]+) $mmap - duration=(?<duration>[\\d]+) millis count=(?<outrecs>[\\d]+).*""".r
+      //  .*Completed (?<tstamp>[\d]{4}-[\d]{6})/(?<tname>[\w]+) (?<inrecs>[\d]+)recs (?<nparts>[\d]+)parts (?<nskew>[\d]+)skew (?<native>[\w]+) (?<xform>[\w]+) (?<action>[\w]+) - duration=(?<duration>[\d]+) millis count=(?<outrecs>[\d]+).*
+      new Regex( s""".*Completed (?<tstamp>[\\d]{4}-[\\d]{6})/(?<tname>[\\w]+) $mmap - duration=(?<duration>[\\d]+\\.[\\d]+) seconds count=(?<outrecs>[\\d]+).*""", groups: _*)
     }
-    println(s"regex=$regex")
 
   }
-  case class DataMap(dlist: SortedMap[String,ColValT])
+
+  case class DataMap(dlist: SortedMap[String, ColValT])
 
   case class LLine(meta: MetaInfo, fields: Seq[Any]) {
-//    def key = s"$tstamp $tname $nparts $nskew $xform $arction $native"
-
-//    def seriesKey = s"$xform-$action-$native"
     val valsMap = fields.map {
       case f: StrColVal => (f.meta.name, f)
       case f: IntColVal => (f.meta.name, f)
+      case f: DoubleColVal => (f.meta.name, f)
       case a => throw new UnsupportedOperationException(s"unsupported LLine datatype: ${a.toString}")
     }.toMap
-    assert(valsMap.keySet == meta.colsMap.keySet,s"Received a line with deficient fields: "
+    assert(valsMap.keySet == meta.colsMap.keySet, s"Received a line with deficient fields: "
       + s"${valsMap.keySet} required=${meta.colsMap.keySet}")
 
     def applyVals(pat: String, vmap: Map[String, _]) = {
 
-      //      val regex = """\$[a-zA-Z0-9_\(\)]+""".r
-      //      val outres = regex.replaceAllIn(pat, valsMap("$1").toString)
       val outres = valsMap.keys.foldLeft(pat) { case (str, k) => {
-          val regex = s"\$$k".r
-          regex.replaceAllIn(str, valsMap(k).cval)
-        }
+        val regex = ("\\$" + k).r
+        val replaced = regex.replaceAllIn(str, valsMap(k).cval.toString)
+        replaced
+      }
       }
       outres
     }
-    val key = applyVals(meta.key1Pat, valsMap)// meta.keyCols.map( col => valsMap(col.name)).mkString(" ")
-    val seriesKey = applyVals(meta.key2Pat, valsMap)// meta.keyCols.map( col => valsMap(col.name)).mkString(" ")
-    def toCsv = meta.allCols.map( ci => valsMap(ci.name).cval).mkString(",")
-  }
 
+    val key = applyVals(meta.key1Pat, valsMap)
+    val seriesKey = applyVals(meta.key2Pat, valsMap)
+
+    def toCsv = meta.allCols.map(ci => valsMap(ci.name).cval).mkString(",")
+  }
 
   object LLine {
     def apply(meta: MetaInfo, line: String) = {
-      //      val line = "<09:18:00><yardstick> Completed 0730-091340/CoreSmoke 10000000recs 100parts 1skew native AggregateByKey/Count - duration=14895 millis count=993127"
-      //      pr(line)
-//      val regex(tstamp, tname,  (meta.clist.map(_.cih.cval): _*).flatten, duration, count) = line
-//      val regex(tstamp, tname,  a, b, c, duration, count) = line
       val rmatch = meta.regex.findFirstMatchIn(line)
       val retval = if (rmatch.isDefined) {
         val m = rmatch.get
-        new LLine (meta,
-            meta.userCols.map { case ci =>
-              ci.ctype match {
-                case q if q == classOf[String] => new StrColVal (ci, m.group(ci.name) )
-                case q if q == classOf[Int] => new IntColVal (ci, m.group(ci.name))
-                case _ => throw new UnsupportedOperationException(s"unsupported LLine datatype: ${ci.ctype.getName}")
-              }
+        new LLine(meta,
+          meta.allCols.map { case ci =>
+            ci.ctype match {
+              case q if q == classOf[String] => new StrColVal(ci, m.group(ci.name))
+              case q if q == classOf[Int] => new IntColVal(ci, m.group(ci.name).toInt)
+              case q if q == classOf[Double] => new DoubleColVal(ci, m.group(ci.name).toDouble)
+              case _ => throw new UnsupportedOperationException(s"unsupported LLine datatype: ${ci.ctype.getName}")
             }
+          }
         )
       } else {
-        throw new InvalidArgumentException(Array(s"Unable to parse line $line"))
+        throw new IllegalArgumentException(s"Unable to parse line $line")
       }
       retval
     }
@@ -166,7 +172,7 @@ object ReportsDataPrep {
     def getFiles(baseDir: String, filter: (File) => Boolean): Seq[File] = {
       val out: Seq[Seq[File]] = for (f <- new File(baseDir).listFiles.filter(filter))
         yield {
-//          pr(s"${f.getAbsolutePath}")
+          //          pr(s"${f.getAbsolutePath}")
           f match {
             case _ if f.isDirectory => getFiles(f.getAbsolutePath, filter)
             case _ if f.isFile => Seq(f)
@@ -214,32 +220,33 @@ object ReportsDataPrep {
   }
 
   def formatT(ts: String) = s"${ts.slice(0, 2)}/${ts.slice(2, 4)} ${ts.slice(5, 7)}:${ts.slice(7, 9)}:${ts.slice(9, 11)}"
-  def formatData(meta: MetaInfo, strLines: Seq[String]): (String,MapSeriesMap) = {
+
+  def formatData(meta: MetaInfo, strLines: Seq[String]): (String, MapSeriesMap) = {
     val lines = strLines.map(LLine(meta, _))
     val seriesCollsGrouping = lines.groupBy(_.key)
     val sortedSeriesCollsGrouping = SortedMap(seriesCollsGrouping.toList: _*)
     val seriesCollsMap = sortedSeriesCollsGrouping.map { case (k, groupseq) =>
       (k, {
-        val unsorted = groupseq.groupBy(_.seriesKey).map { case (k, ls) => (k, ls.sortBy(-1 * _.valsMap("nrecs").cval.toInt)) }
+        val unsorted = groupseq.groupBy(_.seriesKey).map { case (k, ls) => (k, ls.sortBy(_.valsMap("loops").cval.asInstanceOf[Int])) }
         SortedMap(unsorted.toList: _*)
       }
         )
     }
     val csvData = prepareCsvData(meta, seriesCollsMap)
     val seriesMap = seriesCollsMap.map { case (cgroupkey, cmap) =>
-      (cgroupkey, genSeries(cgroupkey, cmap, SeriesPerChart))
+      (cgroupkey, genSeries(meta, cgroupkey, cmap, SeriesPerChart))
     }
     (csvData, SortedMap(seriesMap.toList: _*))
   }
 
   def prepareCsvData(meta: MetaInfo, seriesCollsMap: SortedMap[String,
-      SortedMap[String, Seq[ReportsDataPrep.LLine]]]) = {
+    SortedMap[String, Seq[ReportsDataPrep.LLine]]]) = {
     val csvHeader = meta.csvHeader
-    val csvLines = seriesCollsMap.mapValues {  case smap =>
+    val csvLines = seriesCollsMap.mapValues { case smap =>
       val smapseq = smap.mapValues { case serseq =>
         serseq.map(_.toCsv)
       }.values.toList.flatten
-        smapseq
+      smapseq
     }.values.flatten.toList
     val out = s"${csvHeader}\n${csvLines.mkString("\n")}"
     out
@@ -259,14 +266,14 @@ object ReportsDataPrep {
   type SeriesMap = SortedMap[String, SeriesTup]
   type MapSeriesMap = SortedMap[String, SeriesMap]
 
-  def genSeries(seriesTag: String, seriesMap: SortedMap[String, Seq[LLine]], maxSeries: Int):
+  def genSeries(meta: MetaInfo, seriesTag: String, seriesMap: SortedMap[String, Seq[LLine]], maxSeries: Int):
   SeriesMap = {
     if (seriesMap.size > maxSeries) {
       throw new IllegalArgumentException(s"Can not fit > $maxSeries series in a single chart")
     }
     val seriesTups = seriesMap.map { case (sname, serval) =>
-      (sname, serval.map(l => double2Double(l.valsMap("nrecs").cval.toDouble))
-        .zip(serval.map(l => double2Double(l.valsMap("nrecs").cval.toDouble))))
+      (sname, serval.map(l => double2Double(meta.colsMap("loops").xform(l.valsMap("loops").cval.toString).toInt))
+        .zip(serval.map(l => double2Double(l.valsMap("duration").cval.asInstanceOf[Double]))))
     }
     val seriesData = seriesTups.map { case (sname, sersSeq) =>
       (sname, sersSeq.map { case (x, y) => new XYChart.Data(x, y) })

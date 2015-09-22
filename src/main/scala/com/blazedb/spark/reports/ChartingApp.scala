@@ -59,14 +59,17 @@ object ChartingApp {
 
   class ChartingApp extends Application {
 
-    val YardstickCss = "org/yardstick/spark/reports/ys-charts.css"
+    val ChartsCss = "com/blazedb/spark/reports/ys-charts.css"
     var dataPath: String = _
     var reportsPath: String = _
 
     def getData(dataPath: String): (String, MapSeriesMap) = {
       val lines = grabData(dataPath)
 
-      val (csvData, overSeriesMap) = ReportsDataPrep.formatData(coreMetaInfo, lines)
+//      val (csvData, overSeriesMap) = ReportsDataPrep.formatData(coreMetaInfo, lines)
+      val meta = eMetaInfo
+      println(meta.regex)
+      val (csvData, overSeriesMap) = ReportsDataPrep.formatData(meta, lines)
       (csvData, overSeriesMap)
     }
 
@@ -108,8 +111,8 @@ object ChartingApp {
           new LogAxis(math.max(1, mm._3), mm._4))
 
         xAxis.setTickLabelRotation(20)
-        xAxis.setLabel("Number of Records (Thousands)")
-        yAxis.setLabel("Elapsed Time (msecs) (Lower is Better)")
+        xAxis.setLabel("Number of Loops (Thousands)")
+        yAxis.setLabel("Elapsed Time (seconds) (Lower is Better)")
         val chart = new LineChart[JDouble, JDouble](xAxis, yAxis)
         chart.setTitle(s"Ignite-on-Spark Performance - $chartTitle")
         chart.setTitle(s"$chartTitle")
@@ -133,7 +136,7 @@ object ChartingApp {
         if (ix == 0) {
           tpane.add(lineChart, math.floor(ix / MaxCols).toInt, ix % MaxCols)
           mainScene = new Scene(tpane, displaySize._1, displaySize._2)
-          mainScene.getStylesheets.add(YardstickCss)
+          mainScene.getStylesheets.add(ChartsCss)
           mainStage.setScene(mainScene)
           mainStage.sizeToScene();
           mainStage.show()
@@ -163,7 +166,7 @@ object ChartingApp {
             tpane1.setPadding(new Insets(0, 0, 0, 10))
             tpane1.add(lineChart, math.floor(ix / MaxCols).toInt, ix % MaxCols)
             val mainScene1 = new Scene(tpane1, singleDisplaySize._1, singleDisplaySize._2)
-            mainScene1.getStylesheets.add(YardstickCss)
+            mainScene1.getStylesheets.add(ChartsCss)
             stage.setScene(mainScene1)
             stage.sizeToScene();
             stage.show()

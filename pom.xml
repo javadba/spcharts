@@ -25,6 +25,11 @@
     </properties>
     <dependencies>
         <dependency>
+            <groupId>com.github.travisbrown</groupId>
+            <artifactId>expressier</artifactId>
+            <version>-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.binary.version}</version>
@@ -44,6 +49,10 @@
         <repository>
             <id>Maven snapshots repository</id>
             <url>https://repository.apache.org/content/repositories/snapshots</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
         </repository>
     </repositories>
     <build>
