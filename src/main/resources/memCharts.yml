@@ -1,0 +1,5 @@
+#charts.title: "Ignite-on-Spark Performance"
+charts.title: "Spark-on-C3 Memory Load Test"
+charts.xaxis.label: "Record Size (Bytes)"
+charts.yaxis.label: "Elapsed Time (seconds) (Lower is Better)"
+charts.class: com.blazedb.spark.reports.MemCharts

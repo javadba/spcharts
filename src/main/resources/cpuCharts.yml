@@ -1,0 +1,5 @@
+#charts.title: "Ignite-on-Spark Performance"
+charts.title: "Spark-on-C3 CPU Load Test"
+charts.xaxis.Label: "Number of Loops (Thousands)"
+charts.yaxis.Label: "Elapsed Time (seconds) (Lower is Better)"
+charts.class: com.blazedb.spark.reports.CpuCharts
